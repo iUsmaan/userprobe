@@ -1,127 +1,70 @@
-# UserProbe
+# UserProbe v2
 
-**Probe your name across the web.** AI-powered username availability checker across 16+ platforms.
+**Probe your name across the web.** Check username availability across 25 platforms instantly.
 
-UserProbe uses Claude AI with web search to find real profile data across GitHub, X/Twitter, Instagram, TikTok, YouTube, Reddit, Twitch, LinkedIn, Pinterest, Dribbble, Medium, Steam, Spotify, Discord, Snapchat, and Behance.
+## What's New in v2
 
----
+- **25 platforms** — up from 16
+- **Direct HTTP checks** — no more "uncertain" results. Every platform returns Available or Taken.
+- **Public APIs** for GitHub, Reddit, Bluesky, Mastodon, and Lichess
+- **AI web search** only for Spotify (the one platform without public profiles)
+- **Dark blue UI** — clean, modern design
+- **Much faster** — parallel HTTP checks complete in seconds
 
-## Quick Deploy to Vercel — Windows Guide (5 minutes)
+## How It Works
 
-### Prerequisites
-- A [Vercel](https://vercel.com) account (free — sign up with GitHub)
-- An [Anthropic API key](https://console.anthropic.com/)
-- [Node.js](https://nodejs.org/) 18+ (download the Windows LTS installer)
-- [Git for Windows](https://git-scm.com/download/win) (optional but recommended)
+| Method | Platforms | How |
+|--------|-----------|-----|
+| HTTP profile check | Facebook, YouTube, Instagram, TikTok, LinkedIn, X, Snapchat, Pinterest, Threads, Twitch, Tumblr, Medium, Dribbble, Behance, Steam, Kick, Vimeo, dev.to | Hits the profile URL, checks if 200 (taken) or 404 (available) |
+| Public API | GitHub, Reddit, Bluesky, Mastodon, Lichess | Calls the platform's public REST/JSON API |
+| AI web search | Spotify | Uses Claude with web search as fallback |
+| Skipped | Discord | No public profiles — usernames are private |
 
-### Steps
+## Deploy (Browser Only — No Installs Needed)
 
-**1. Extract the zip file**
-Right-click `userprobe.zip` → Extract All → pick a folder (e.g. your Desktop).
+### 1. Create accounts (all free)
+- [GitHub](https://github.com) — sign up with email
+- [Vercel](https://vercel.com) — sign up with GitHub
+- [Anthropic](https://console.anthropic.com) — get an API key
 
-**2. Open a terminal in the project folder**
-Open the extracted `userprobe` folder in File Explorer, then:
-- Click the address bar, type `cmd`, and hit Enter
-- OR right-click → "Open in Terminal" (Windows 11)
-- OR open PowerShell/Command Prompt and run:
-```
-cd C:\Users\YourName\Desktop\userprobe
-```
+### 2. Create a GitHub repo
+- Go to https://github.com/new
+- Name it `userprobe`, check "Add a README", click Create
+- Click "Add file" → "Upload files"
+- Drag ALL files from this zip into the upload area
+- Click "Commit changes"
 
-**3. Install dependencies**
-```
-npm install
-```
+### 3. Deploy on Vercel
+- Go to https://vercel.com/new
+- Import your `userprobe` repo
+- Click Deploy — wait 1-2 minutes
 
-**4. Test locally (optional)**
-Create a file called `.env.local` in the project root with this content:
-```
-ANTHROPIC_API_KEY=sk-ant-your-key-here
-```
-Then run:
-```
-npm run dev
-```
-Open `http://localhost:5173` in your browser.
+### 4. Add API key
+- Vercel dashboard → your project → Settings → Environment Variables
+- Key: `ANTHROPIC_API_KEY` — Value: your key
+- Check all boxes → Save
+- Go to Deployments → Redeploy
 
-**5. Deploy to Vercel**
-```
-npx vercel
-```
-- It will ask you to log in (opens browser) — log in with your Vercel account
-- When asked "Set up and deploy?", press Enter (Yes)
-- When asked about settings, accept all defaults (just keep pressing Enter)
-- Wait for it to finish — it will give you a URL like `userprobe-xxxx.vercel.app`
-
-**6. Add your API key in Vercel**
-- Go to [vercel.com/dashboard](https://vercel.com/dashboard)
-- Click your `userprobe` project
-- Go to **Settings** → **Environment Variables**
-- Add a new variable:
-  - Name: `ANTHROPIC_API_KEY`
-  - Value: `sk-ant-your-key-here` (paste your real key)
-  - Environment: Check all boxes (Production, Preview, Development)
-- Click **Save**
-
-**7. Redeploy with the key active**
-Back in your terminal:
-```
-npx vercel --prod
-```
-
-That's it! Your app is live at `your-project.vercel.app` 🎉
-
-### Troubleshooting on Windows
-- **"npm is not recognized"** → Restart your terminal after installing Node.js
-- **"npx vercel" hangs** → Try running PowerShell as Administrator
-- **Build errors** → Make sure you're inside the `userprobe` folder (not a parent folder)
-- **API returns errors after deploy** → Double-check the env variable name is exactly `ANTHROPIC_API_KEY`
-
----
+Your app is live!
 
 ## Project Structure
 
 ```
 userprobe/
-├── api/
-│   └── probe.js          # Vercel serverless function (API proxy)
-├── public/
-│   └── favicon.svg       # App icon
-├── src/
-│   ├── App.jsx           # Main React application
-│   └── main.jsx          # React entry point
-├── index.html            # HTML entry
+├── api/probe.js        # Serverless function (HTTP checks + APIs)
+├── src/App.jsx         # React frontend (dark blue theme)
+├── src/main.jsx        # Entry point
+├── public/favicon.svg  # App icon
+├── index.html
 ├── package.json
-├── vite.config.js        # Vite bundler config
-├── vercel.json           # Vercel deployment config
-├── .env.example          # Environment variable template
-└── .gitignore
+├── vite.config.js
+├── vercel.json
+└── .env.example
 ```
 
-## How It Works
-
-1. User enters a username
-2. Frontend sends batched requests to `/api/probe`
-3. Serverless function calls Claude API with web search enabled
-4. Claude searches the web for each platform profile
-5. Results stream back: likely_taken / likely_available / uncertain
-6. User can click "Visit ↗" to verify directly
-
-## Security
-
-- Your Anthropic API key is **never exposed** to the browser
-- It lives only in Vercel's environment variables
-- The serverless function acts as a secure proxy
-
----
-
 ## Coming Soon
-
-- Email address availability checker
+- Email address checker
 - Domain name checker
 - Memorable password generator
-- More platforms
-
----
 
 Built with React, Vite, and Claude AI.

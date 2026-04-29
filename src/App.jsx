@@ -1,248 +1,226 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 
-/* ─── Platform Registry ─── */
-const PLATFORMS = [
-  { name: 'GitHub', url: u => `https://github.com/${u}`, icon: '⌘', accent: '#24292F', bg: '#F6F8FA' },
-  { name: 'X / Twitter', url: u => `https://x.com/${u}`, icon: '𝕏', accent: '#0F1419', bg: '#F7F9F9' },
-  { name: 'Instagram', url: u => `https://instagram.com/${u}`, icon: '◐', accent: '#E1306C', bg: '#FDF2F6' },
-  { name: 'TikTok', url: u => `https://tiktok.com/@${u}`, icon: '♬', accent: '#010101', bg: '#F0FAF5' },
-  { name: 'YouTube', url: u => `https://youtube.com/@${u}`, icon: '▷', accent: '#FF0000', bg: '#FFF5F5' },
-  { name: 'Reddit', url: u => `https://reddit.com/user/${u}`, icon: '◉', accent: '#FF4500', bg: '#FFF7F2' },
-  { name: 'Twitch', url: u => `https://twitch.tv/${u}`, icon: '◈', accent: '#9146FF', bg: '#F8F0FF' },
-  { name: 'LinkedIn', url: u => `https://linkedin.com/in/${u}`, icon: '∎', accent: '#0A66C2', bg: '#F0F6FC' },
-  { name: 'Pinterest', url: u => `https://pinterest.com/${u}`, icon: '⊕', accent: '#E60023', bg: '#FFF0F2' },
-  { name: 'Dribbble', url: u => `https://dribbble.com/${u}`, icon: '●', accent: '#EA4C89', bg: '#FEF0F5' },
-  { name: 'Medium', url: u => `https://medium.com/@${u}`, icon: 'M', accent: '#000000', bg: '#F5F5F5' },
-  { name: 'Steam', url: u => `https://steamcommunity.com/id/${u}`, icon: '◇', accent: '#1B2838', bg: '#EDF1F5' },
-  { name: 'Spotify', url: u => `https://open.spotify.com/user/${u}`, icon: '◎', accent: '#1DB954', bg: '#EEFBF2' },
-  { name: 'Discord', url: null, icon: '◆', accent: '#5865F2', bg: '#F0F1FE' },
-  { name: 'Snapchat', url: u => `https://snapchat.com/add/${u}`, icon: '◪', accent: '#FFFC00', bg: '#FFFDE0' },
-  { name: 'Behance', url: u => `https://behance.net/${u}`, icon: 'Bē', accent: '#1769FF', bg: '#EEF3FF' },
+// ─── Checked platforms (real APIs, server-side) ───────────────────────────
+const API_PLATFORMS = [
+  { name: 'GitHub',   url: u => `https://github.com/${u}`,                          accent: '#8B949E', icon: '⌘' },
+  { name: 'Reddit',   url: u => `https://reddit.com/user/${u}`,                     accent: '#FF4500', icon: '◉' },
+  { name: 'Twitch',   url: u => `https://twitch.tv/${u}`,                           accent: '#9146FF', icon: '◈' },
+  { name: 'YouTube',  url: u => `https://youtube.com/@${u}`,                        accent: '#FF0000', icon: '▶' },
+  { name: 'Bluesky',  url: u => `https://bsky.app/profile/${u}.bsky.social`,        accent: '#0085FF', icon: '☁' },
 ];
 
-const STATUS = {
-  idle:             { color: '#999',    bg: 'transparent' },
-  searching:        { color: '#8B7355', bg: '#FDF8F3' },
-  likely_taken:     { color: '#C0392B', bg: '#FDF2F2' },
-  likely_available: { color: '#27AE60', bg: '#F0FDF4' },
-  uncertain:        { color: '#B8860B', bg: '#FFFBEB' },
-  error:            { color: '#888',    bg: '#F9F9F9' },
-};
+// ─── Manual-check platforms (no reliable public API) ─────────────────────
+const MANUAL_PLATFORMS = [
+  { name: 'Instagram', url: u => `https://instagram.com/${u}`,                accent: '#E1306C', icon: '◐' },
+  { name: 'TikTok',    url: u => `https://tiktok.com/@${u}`,                  accent: '#00F2EA', icon: '♬' },
+  { name: 'X/Twitter', url: u => `https://x.com/${u}`,                        accent: '#8ECDF8', icon: '𝕏' },
+  { name: 'LinkedIn',  url: u => `https://linkedin.com/in/${u}`,              accent: '#0A66C2', icon: 'in' },
+  { name: 'Pinterest', url: u => `https://pinterest.com/${u}`,                accent: '#E60023', icon: 'P'  },
+];
 
-/* ─── Tiny Components ─── */
-function Spinner() {
-  return <div style={{ width: 18, height: 18, borderRadius: '50%', border: '2px solid #D4C5B0', borderTopColor: '#8B7355', animation: 'spin 0.7s linear infinite' }} />;
+// ─── Status Badge ─────────────────────────────────────────────────────────
+function StatusBadge({ status }) {
+  if (status === 'checking') {
+    return (
+      <div style={{ width: 18, height: 18, borderRadius: '50%', border: '2px solid #2A3A5C', borderTopColor: '#60A5FA', animation: 'spin 0.6s linear infinite', flexShrink: 0 }} />
+    );
+  }
+  const map = {
+    available: { label: 'AVAILABLE', color: '#34D399' },
+    taken:     { label: 'TAKEN',     color: '#F87171' },
+    no_key:    { label: 'NO API KEY', color: '#FBBF24' },
+    error:     { label: 'ERROR',     color: '#64748B' },
+  };
+  const cfg = map[status];
+  if (!cfg) return null;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+      <span style={{ fontSize: 11, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, color: cfg.color, letterSpacing: '0.05em' }}>{cfg.label}</span>
+      <div style={{ width: 7, height: 7, borderRadius: '50%', background: cfg.color, boxShadow: `0 0 7px ${cfg.color}88` }} />
+    </div>
+  );
 }
 
-function StatusIcon({ status }) {
-  if (status === 'searching') return <Spinner />;
-  if (status === 'likely_taken') return <span style={{ fontSize: 15, color: '#C0392B', fontWeight: 700 }}>✕</span>;
-  if (status === 'likely_available') return <span style={{ fontSize: 15, color: '#27AE60', fontWeight: 700 }}>✓</span>;
-  if (status === 'uncertain') return <span style={{ fontSize: 13, color: '#B8860B', fontWeight: 700 }}>?</span>;
-  if (status === 'error') return <span style={{ fontSize: 13, color: '#888' }}>—</span>;
-  return <span style={{ fontSize: 13, color: '#CCC' }}>○</span>;
-}
-
-function PlatformRow({ platform, username, status, detail, idx }) {
-  const cfg = STATUS[status] || STATUS.idle;
-  const link = platform.url ? platform.url(username) : null;
-  const resolved = status === 'likely_taken' || status === 'likely_available' || status === 'uncertain' || status === 'error';
+// ─── API Platform Row ─────────────────────────────────────────────────────
+function ApiRow({ platform, username, status }) {
+  const link = username ? platform.url(username) : null;
+  const resolved = ['available', 'taken', 'no_key', 'error'].includes(status);
+  const bg     = status === 'available' ? '#0D2818' : status === 'taken' ? '#2A1015' : status === 'no_key' ? '#1C1508' : '#0F1729';
+  const border = status === 'available' ? '#166534' : status === 'taken' ? '#7F1D1D55' : status === 'no_key' ? '#92400E55' : '#1E293B';
 
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 14,
-      padding: '13px 16px', borderRadius: 12,
-      background: status !== 'idle' ? cfg.bg : '#FAFAF7',
-      border: `1px solid ${status !== 'idle' ? cfg.color + '22' : '#EDEBE6'}`,
-      transition: 'all 0.35s cubic-bezier(0.16,1,0.3,1)',
-      animation: status === 'searching' ? 'fadeSlideIn 0.3s ease forwards' : undefined,
-      animationDelay: `${idx * 25}ms`,
-    }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', borderRadius: 10, background: bg, border: `1px solid ${border}`, transition: 'all 0.3s ease' }}>
       <div style={{
-        width: 38, height: 38, borderRadius: 10, background: platform.bg,
+        width: 38, height: 38, borderRadius: 9, flexShrink: 0,
+        background: `${platform.accent}18`, border: `1px solid ${platform.accent}28`,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: platform.icon.length > 1 ? 13 : 18, fontWeight: 800,
-        color: platform.accent, flexShrink: 0,
-        fontFamily: "'Cormorant Garamond', Georgia, serif",
+        fontSize: platform.icon.length > 1 ? 12 : 17, fontWeight: 700, color: platform.accent,
+        fontFamily: "'Outfit', sans-serif",
       }}>{platform.icon}</div>
 
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 600, color: '#2C2416', fontFamily: "'Cormorant Garamond', Georgia, serif" }}>{platform.name}</div>
-        {detail && <div style={{ fontSize: 10.5, color: '#8A7A6A', marginTop: 2, fontFamily: "'JetBrains Mono', monospace", whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{detail}</div>}
+        <div style={{ fontSize: 14, fontWeight: 500, color: '#E2E8F0', fontFamily: "'Outfit', sans-serif" }}>{platform.name}</div>
+        <div style={{ fontSize: 9.5, color: '#334155', fontFamily: "'JetBrains Mono', monospace", marginTop: 2 }}>⚡ API check</div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-        {resolved && link && (
-          <a href={link} target="_blank" rel="noopener noreferrer" style={{
-            fontSize: 10, fontFamily: "'JetBrains Mono', monospace", color: platform.accent,
-            textDecoration: 'none', padding: '4px 10px', borderRadius: 6,
-            background: platform.accent + '10', border: `1px solid ${platform.accent}20`,
-            fontWeight: 500, transition: 'opacity 0.2s',
-          }}>Visit ↗</a>
-        )}
-        <StatusIcon status={status} />
-      </div>
+      {resolved && status !== 'error' && status !== 'no_key' && link && (
+        <a href={link} target="_blank" rel="noopener noreferrer" style={{
+          fontSize: 10, color: '#60A5FA', textDecoration: 'none',
+          padding: '4px 10px', borderRadius: 6, background: '#60A5FA12',
+          border: '1px solid #60A5FA25', fontWeight: 500, flexShrink: 0,
+          fontFamily: "'JetBrains Mono', monospace",
+        }}>Visit ↗</a>
+      )}
+
+      <StatusBadge status={status} />
     </div>
   );
 }
 
-function SummaryPill({ count, label, color, bg, border }) {
+// ─── Manual Platform Row ──────────────────────────────────────────────────
+function ManualRow({ platform, username }) {
+  const link = username ? platform.url(username) : null;
+
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 7, background: bg, border: `1.5px solid ${border}`, padding: '6px 14px', borderRadius: 8 }}>
-      <span style={{ color, fontWeight: 700, fontSize: 16, fontFamily: "'JetBrains Mono', monospace" }}>{count}</span>
-      <span style={{ fontSize: 11.5, color, fontWeight: 500, fontFamily: "'JetBrains Mono', monospace" }}>{label}</span>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', borderRadius: 10, background: '#0C1525', border: '1px solid #1E293B' }}>
+      <div style={{
+        width: 38, height: 38, borderRadius: 9, flexShrink: 0,
+        background: `${platform.accent}10`, border: `1px solid ${platform.accent}20`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: platform.icon.length > 1 ? 12 : 17, fontWeight: 700,
+        color: `${platform.accent}88`, fontFamily: "'Outfit', sans-serif",
+      }}>{platform.icon}</div>
+
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 500, color: '#64748B', fontFamily: "'Outfit', sans-serif" }}>{platform.name}</div>
+        <div style={{ fontSize: 9.5, color: '#1E3A5F', fontFamily: "'JetBrains Mono', monospace", marginTop: 2 }}>No public API — check manually</div>
+      </div>
+
+      {link && username && (
+        <a href={link} target="_blank" rel="noopener noreferrer" style={{
+          fontSize: 10, color: platform.accent, textDecoration: 'none',
+          padding: '5px 12px', borderRadius: 6,
+          background: `${platform.accent}12`, border: `1px solid ${platform.accent}25`,
+          fontWeight: 600, flexShrink: 0, fontFamily: "'JetBrains Mono', monospace",
+          letterSpacing: '0.03em',
+        }}>Check ↗</a>
+      )}
     </div>
   );
 }
 
-/* ─── Main App ─── */
+// ─── Main App ─────────────────────────────────────────────────────────────
 export default function App() {
   const [username, setUsername] = useState('');
   const [results, setResults] = useState({});
   const [isChecking, setIsChecking] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
-  const [progress, setProgress] = useState(0);
   const inputRef = useRef(null);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
   const probe = useCallback(async () => {
-    const name = username.trim();
+    const name = username.trim().toLowerCase();
     if (!name || isChecking) return;
 
     setIsChecking(true);
     setHasSearched(true);
-    setProgress(0);
 
+    // Set API platforms to checking
     const init = {};
-    PLATFORMS.forEach(p => { init[p.name] = { status: 'searching', detail: '' }; });
+    API_PLATFORMS.forEach(p => { init[p.name] = 'checking'; });
     setResults(init);
 
-    // Batch into groups of 4
-    const batchSize = 4;
-    const batches = [];
-    for (let i = 0; i < PLATFORMS.length; i += batchSize) {
-      batches.push(PLATFORMS.slice(i, i + batchSize));
-    }
+    try {
+      const res = await fetch('/api/probe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: name }),
+      });
+      const data = await res.json();
 
-    let completed = 0;
-
-    for (const batch of batches) {
-      const payload = batch.map(p => ({
-        name: p.name,
-        profileUrl: p.url ? p.url(name) : null,
-      }));
-
-      try {
-        const res = await fetch('/api/probe', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: name, platforms: payload }),
-        });
-
-        const data = await res.json();
-
-        if (data.results && Array.isArray(data.results)) {
-          setResults(prev => {
-            const next = { ...prev };
-            data.results.forEach(item => {
-              if (item.platform && item.status) {
-                const valid = ['likely_taken', 'likely_available', 'uncertain'];
-                next[item.platform] = {
-                  status: valid.includes(item.status) ? item.status : 'uncertain',
-                  detail: item.detail || '',
-                };
-              }
-            });
-            return next;
-          });
-        } else {
-          batch.forEach(p => {
-            setResults(prev => ({ ...prev, [p.name]: { status: 'error', detail: data.error || 'Request failed' } }));
-          });
-        }
-      } catch {
-        batch.forEach(p => {
-          setResults(prev => ({ ...prev, [p.name]: { status: 'error', detail: 'Network error' } }));
-        });
+      if (data.results) {
+        const next = {};
+        data.results.forEach(r => { next[r.platform] = r.status; });
+        setResults(next);
       }
-
-      completed += batch.length;
-      setProgress(Math.round((completed / PLATFORMS.length) * 100));
+    } catch {
+      const err = {};
+      API_PLATFORMS.forEach(p => { err[p.name] = 'error'; });
+      setResults(err);
     }
 
     setIsChecking(false);
   }, [username, isChecking]);
 
-  const counts = Object.values(results).reduce((a, r) => {
-    if (r.status === 'likely_taken') a.taken++;
-    else if (r.status === 'likely_available') a.available++;
-    else if (r.status === 'uncertain') a.uncertain++;
+  const counts = Object.values(results).reduce((a, s) => {
+    if (s === 'available') a.available++;
+    else if (s === 'taken') a.taken++;
     return a;
-  }, { taken: 0, available: 0, uncertain: 0 });
+  }, { available: 0, taken: 0 });
 
   const allDone = hasSearched && !isChecking;
 
   return (
     <div style={{
-      minHeight: '100vh', width: '100%', background: '#F9F7F3',
-      fontFamily: "'Cormorant Garamond', Georgia, serif",
+      minHeight: '100vh', width: '100%',
+      background: 'linear-gradient(170deg, #0B1120 0%, #0F172A 50%, #111827 100%)',
+      fontFamily: "'Outfit', sans-serif",
       display: 'flex', flexDirection: 'column', alignItems: 'center',
-      padding: '36px 16px 60px',
+      padding: '40px 16px 60px',
     }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
         @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes breathe { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.15; } }
-        @keyframes gradientShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
-        input::placeholder { color: #C4B8A8; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.15; } }
+        input::placeholder { color: #475569; }
         input:focus { outline: none; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: #F9F7F3; }
+        body { background: #0B1120; }
+        a:hover { opacity: 0.75; }
       `}</style>
 
-      {/* ── Logo & Header ── */}
-      <div style={{ textAlign: 'center', marginBottom: 36, maxWidth: 540 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 18 }}>
-          <div style={{
-            width: 40, height: 40, borderRadius: 12,
-            background: '#1E1B15', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#F9F7F3', fontSize: 20, fontWeight: 700,
-            fontFamily: "'Cormorant Garamond', serif",
-            boxShadow: '0 2px 8px rgba(30,27,21,0.2)',
-          }}>U</div>
-          <span style={{
-            fontSize: 22, fontWeight: 700, color: '#1E1B15',
-            fontFamily: "'Cormorant Garamond', serif", letterSpacing: '-0.02em',
-          }}>UserProbe</span>
-        </div>
+      {/* Logo */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28 }}>
+        <div style={{
+          width: 38, height: 38, borderRadius: 10,
+          background: 'linear-gradient(135deg, #1E3A5F, #2563EB)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: '#E2E8F0', fontSize: 18, fontWeight: 700,
+          boxShadow: '0 0 20px #2563EB33',
+        }}>U</div>
+        <span style={{ fontSize: 22, fontWeight: 600, color: '#E2E8F0', letterSpacing: '-0.02em' }}>UserProbe</span>
+      </div>
 
+      {/* Header */}
+      <div style={{ textAlign: 'center', marginBottom: 32, maxWidth: 480 }}>
         <h1 style={{
-          fontSize: 'clamp(26px, 5vw, 42px)', fontWeight: 400,
-          color: '#1E1B15', lineHeight: 1.15, letterSpacing: '-0.02em',
+          fontSize: 'clamp(28px, 5vw, 44px)', fontWeight: 300,
+          color: '#E2E8F0', lineHeight: 1.15, letterSpacing: '-0.03em',
         }}>
           Probe your name<br />
-          <span style={{ fontWeight: 700, fontStyle: 'italic' }}>across the web.</span>
+          <span style={{ fontWeight: 700, color: '#60A5FA' }}>across the web.</span>
         </h1>
         <p style={{
-          fontSize: 14, color: '#8A7A6A', lineHeight: 1.6,
-          marginTop: 10, fontFamily: "'JetBrains Mono', monospace",
-          fontWeight: 400, maxWidth: 440, margin: '10px auto 0',
+          fontSize: 13, color: '#64748B', lineHeight: 1.6, marginTop: 12,
+          fontFamily: "'JetBrains Mono', monospace",
         }}>
-          AI-powered username search across {PLATFORMS.length} platforms.
+          {API_PLATFORMS.length} accurate API checks · {MANUAL_PLATFORMS.length} manual links
         </p>
       </div>
 
-      {/* ── Search Bar ── */}
+      {/* Search bar */}
       <div style={{
-        width: '100%', maxWidth: 500, background: '#FFFFFF', borderRadius: 16,
-        border: '1.5px solid #E4DED4', padding: '5px 5px 5px 20px',
+        width: '100%', maxWidth: 500,
+        background: '#0F172A', borderRadius: 14,
+        border: '1.5px solid #1E293B',
+        padding: '5px 5px 5px 20px',
         display: 'flex', alignItems: 'center', gap: 8,
-        boxShadow: '0 2px 20px rgba(30,27,21,0.04)',
-        marginBottom: 12,
+        boxShadow: '0 4px 24px rgba(0,0,0,0.3)',
+        marginBottom: isChecking ? 12 : 32,
       }}>
-        <span style={{ fontSize: 18, color: '#C4B8A8', fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, userSelect: 'none' }}>@</span>
+        <span style={{ fontSize: 17, color: '#334155', fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, userSelect: 'none' }}>@</span>
         <input
           ref={inputRef} type="text" placeholder="enter username…"
           value={username}
@@ -250,73 +228,108 @@ export default function App() {
           onKeyDown={e => e.key === 'Enter' && probe()}
           style={{
             flex: 1, border: 'none', background: 'transparent',
-            fontSize: 16, fontFamily: "'Cormorant Garamond', serif",
-            color: '#1E1B15', fontWeight: 400, padding: '13px 0',
+            fontSize: 16, fontFamily: "'Outfit', sans-serif",
+            color: '#E2E8F0', fontWeight: 400, padding: '13px 0',
           }}
         />
         <button onClick={probe} disabled={!username.trim() || isChecking} style={{
-          padding: '12px 26px', borderRadius: 12,
-          background: !username.trim() || isChecking ? '#D8D0C4' : '#1E1B15',
-          color: '#F9F7F3', border: 'none',
+          padding: '12px 28px', borderRadius: 10,
+          background: !username.trim() || isChecking ? '#1E293B' : 'linear-gradient(135deg, #2563EB, #1D4ED8)',
+          color: !username.trim() || isChecking ? '#475569' : '#FFFFFF',
+          border: 'none',
           cursor: !username.trim() || isChecking ? 'default' : 'pointer',
           fontSize: 13, fontWeight: 600, fontFamily: "'JetBrains Mono', monospace",
-          letterSpacing: '0.03em', transition: 'all 0.25s ease',
+          letterSpacing: '0.04em', transition: 'all 0.25s ease',
+          boxShadow: !username.trim() || isChecking ? 'none' : '0 0 20px #2563EB44',
+          whiteSpace: 'nowrap',
         }}>
-          {isChecking ? `${progress}%` : 'Probe'}
+          {isChecking ? '...' : 'PROBE'}
         </button>
       </div>
 
-      {/* ── Progress Bar ── */}
+      {/* Progress bar while checking */}
       {isChecking && (
-        <div style={{ width: '100%', maxWidth: 500, height: 3, background: '#EDE8E0', borderRadius: 2, marginBottom: 28, overflow: 'hidden' }}>
+        <div style={{ width: '100%', maxWidth: 500, height: 2, background: '#1E293B', borderRadius: 1, marginBottom: 28, overflow: 'hidden' }}>
           <div style={{
-            height: '100%', width: `${progress}%`,
-            background: 'linear-gradient(90deg, #8B7355, #6B5B45)',
-            borderRadius: 2, transition: 'width 0.5s ease',
+            height: '100%', width: '100%',
+            background: 'linear-gradient(90deg, #1E293B, #2563EB, #60A5FA, #2563EB, #1E293B)',
+            backgroundSize: '200% 100%',
+            animation: 'shimmer 1.5s linear infinite',
+            borderRadius: 1,
           }} />
         </div>
       )}
-      {!isChecking && hasSearched && <div style={{ height: 16 }} />}
 
-      {/* ── Summary Pills ── */}
+      {/* Summary */}
       {allDone && (
-        <div style={{ display: 'flex', gap: 16, marginBottom: 24, flexWrap: 'wrap', justifyContent: 'center', animation: 'fadeSlideIn 0.4s ease' }}>
-          <SummaryPill count={counts.available} label="available" color="#27AE60" bg="#F0FDF4" border="#BBF7D0" />
-          <SummaryPill count={counts.taken} label="taken" color="#C0392B" bg="#FDF2F2" border="#FECACA" />
-          <SummaryPill count={counts.uncertain} label="uncertain" color="#B8860B" bg="#FFFBEB" border="#FDE68A" />
-        </div>
-      )}
-
-      {/* ── Results ── */}
-      {hasSearched && (
-        <div style={{ width: '100%', maxWidth: 600, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {PLATFORMS.map((p, i) => {
-            const r = results[p.name] || { status: 'idle', detail: '' };
-            return <PlatformRow key={p.name} platform={p} username={username.trim()} status={r.status} detail={r.detail} idx={i} />;
-          })}
-        </div>
-      )}
-
-      {/* ── Empty State ── */}
-      {!hasSearched && (
-        <div style={{ marginTop: 48, textAlign: 'center', color: '#C4B8A8' }}>
-          <div style={{ fontSize: 52, marginBottom: 14, opacity: 0.35, animation: 'breathe 4s ease infinite' }}>⊙</div>
-          <div style={{ fontSize: 12.5, fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.06em', lineHeight: 1.8 }}>
-            Type a username and hit Probe<br />
-            <span style={{ fontSize: 11, opacity: 0.7 }}>AI will scour the web for matches</span>
+        <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap', justifyContent: 'center', animation: 'fadeIn 0.4s ease' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#0D2818', border: '1px solid #166534', padding: '8px 16px', borderRadius: 8 }}>
+            <span style={{ color: '#34D399', fontWeight: 700, fontSize: 18, fontFamily: "'JetBrains Mono', monospace" }}>{counts.available}</span>
+            <span style={{ fontSize: 12, color: '#34D399', fontWeight: 500, fontFamily: "'JetBrains Mono', monospace" }}>available</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#2A1015', border: '1px solid #7F1D1D', padding: '8px 16px', borderRadius: 8 }}>
+            <span style={{ color: '#F87171', fontWeight: 700, fontSize: 18, fontFamily: "'JetBrains Mono', monospace" }}>{counts.taken}</span>
+            <span style={{ fontSize: 12, color: '#F87171', fontWeight: 500, fontFamily: "'JetBrains Mono', monospace" }}>taken</span>
           </div>
         </div>
       )}
 
-      {/* ── Footer ── */}
+      {/* Results */}
+      {hasSearched && (
+        <div style={{ width: '100%', maxWidth: 520, display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* API Checked section */}
+          <div>
+            <div style={{ fontSize: 10, fontFamily: "'JetBrains Mono', monospace", color: '#334155', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 8, paddingLeft: 4 }}>
+              ⚡ API Verified
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {API_PLATFORMS.map(p => (
+                <ApiRow key={p.name} platform={p} username={username.trim().toLowerCase()} status={results[p.name] || 'checking'} />
+              ))}
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div style={{ border: 'none', borderTop: '1px solid #1E293B', margin: '4px 0' }} />
+
+          {/* Manual check section */}
+          <div>
+            <div style={{ fontSize: 10, fontFamily: "'JetBrains Mono', monospace", color: '#1E3A5F', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 8, paddingLeft: 4 }}>
+              🌐 Check Manually
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {MANUAL_PLATFORMS.map(p => (
+                <ManualRow key={p.name} platform={p} username={username.trim().toLowerCase()} />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!hasSearched && (
+        <div style={{ marginTop: 48, textAlign: 'center' }}>
+          <div style={{ fontSize: 48, marginBottom: 14, opacity: 0.2, color: '#60A5FA', animation: 'pulse 4s ease infinite' }}>⊙</div>
+          <div style={{ fontSize: 13, fontFamily: "'JetBrains Mono', monospace", color: '#334155', letterSpacing: '0.06em', lineHeight: 1.8 }}>
+            Type a username and hit PROBE<br />
+            <span style={{ fontSize: 11, opacity: 0.7 }}>5 platforms checked via real APIs</span>
+          </div>
+        </div>
+      )}
+
+      {/* Footer */}
       <div style={{
-        marginTop: 40, maxWidth: 420, textAlign: 'center',
-        fontSize: 10.5, fontFamily: "'JetBrains Mono', monospace",
-        color: '#B8A898', letterSpacing: '0.03em', lineHeight: 1.7,
+        marginTop: 40, maxWidth: 480, textAlign: 'center',
+        fontSize: 10, fontFamily: "'JetBrains Mono', monospace",
+        color: '#1E293B', letterSpacing: '0.04em', lineHeight: 1.8,
       }}>
-        Results based on AI web search — accuracy varies.<br />
-        Click "Visit ↗" to verify each platform directly.
+        GitHub · Reddit · Twitch — no key needed<br />
+        YouTube — requires Google API key (free)<br />
+        Bluesky — no key needed
       </div>
+
+      <style>{`@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
     </div>
   );
 }
